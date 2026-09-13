@@ -1,19 +1,18 @@
 version: "3.8"
 
 networks:
-  streaming-net:
+  batch-net:
     driver: bridge
 
 volumes:
-  timescale-data:
+  namenode-data:
+  datanode-data:
+  postgres-data:
   kafka-data:
   zookeeper-data:
 
 services:
 
-  # ---------------------------------------------------------------------
-  # Ingestion Layer: Zookeeper + Kafka Broker
-  # ---------------------------------------------------------------------
   zookeeper:
     image: confluentinc/cp-zookeeper:7.5.0
     container_name: zookeeper
@@ -24,19 +23,14 @@ services:
     volumes:
       - zookeeper-data:/var/lib/zookeeper/data
     networks:
-      - streaming-net
-    healthcheck:
-      test: ["CMD-SHELL", "echo ruok | nc localhost 2181 || exit 1"]
-      interval: 10s
-      retries: 5
+      - batch-net
 
   kafka:
     image: confluentinc/cp-kafka:7.5.0
     container_name: kafka
     restart: unless-stopped
     depends_on:
-      zookeeper:
-        condition: service_healthy
+      - zookeeper
     ports:
       - "9092:9092"
     environment:
@@ -50,101 +44,7 @@ services:
     volumes:
       - kafka-data:/var/lib/kafka/data
     networks:
-      - streaming-net
-    healthcheck:
-      test: ["CMD-SHELL", "kafka-topics --bootstrap-server localhost:29092 --list || exit 1"]
-      interval: 10s
-      retries: 10
+      - batch-net
 
-  kafka-ui:
-    image: provectuslabs/kafka-ui:latest
-    container_name: kafka-ui
-    restart: unless-stopped
-    depends_on:
-      - kafka
-    ports:
-      - "8080:8080"
-    environment:
-      KAFKA_CLUSTERS_0_NAME: local
-      KAFKA_CLUSTERS_0_BOOTSTRAPSERVERS: kafka:29092
-    networks:
-      - streaming-net
-
-  # ---------------------------------------------------------------------
-  # Storage Layer: TimescaleDB
-  # ---------------------------------------------------------------------
-  timescaledb:
-    image: timescale/timescaledb:2.14.2-pg15
-    container_name: timescaledb
-    restart: unless-stopped
-    environment:
-      POSTGRES_USER: ${POSTGRES_USER:-streaming_user}
-      POSTGRES_PASSWORD: ${POSTGRES_PASSWORD:-streaming_pw}
-      POSTGRES_DB: ${POSTGRES_DB:-sensor_data}
-    ports:
-      - "5432:5432"
-    volumes:
-      - timescale-data:/var/lib/postgresql/data
-      - ./storage/init.sql:/docker-entrypoint-initdb.d/init.sql:ro
-    networks:
-      - streaming-net
-    healthcheck:
-      test: ["CMD-SHELL", "pg_isready -U ${POSTGRES_USER:-streaming_user}"]
-      interval: 10s
-      retries: 5
-
-  adminer:
-    image: adminer:latest
-    container_name: adminer
-    restart: unless-stopped
-    depends_on:
-      - timescaledb
-    ports:
-      - "8081:8080"
-    networks:
-      - streaming-net
-
-  # ---------------------------------------------------------------------
-  # Ingestion-Microservice
-  # ---------------------------------------------------------------------
-  sensor-producer:
-    build:
-      context: ./ingestion
-    container_name: sensor-producer
-    restart: unless-stopped
-    depends_on:
-      kafka:
-        condition: service_healthy
-    environment:
-      KAFKA_BROKER: kafka:29092
-      KAFKA_TOPIC: sensor-readings
-      NUM_SENSORS: 10
-      EMIT_INTERVAL_SECONDS: 1
-    networks:
-      - streaming-net
-
-  # ---------------------------------------------------------------------
-  # Processing-Microservice
-  # ---------------------------------------------------------------------
-  stream-processor:
-    build:
-      context: ./processing
-    container_name: stream-processor
-    restart: unless-stopped
-    depends_on:
-      kafka:
-        condition: service_healthy
-      timescaledb:
-        condition: service_healthy
-    environment:
-      KAFKA_BROKER: kafka:29092
-      INPUT_TOPIC: sensor-readings
-      OUTPUT_TOPIC: sensor-aggregates
-      WINDOW_SECONDS: 10
-      POSTGRES_HOST: timescaledb
-      POSTGRES_PORT: 5432
-      POSTGRES_USER: ${POSTGRES_USER:-streaming_user}
-      POSTGRES_PASSWORD: ${POSTGRES_PASSWORD:-streaming_pw}
-      POSTGRES_DB: ${POSTGRES_DB:-sensor_data}
-    networks:
-      - streaming-net
+  namenode:
+    image: b
