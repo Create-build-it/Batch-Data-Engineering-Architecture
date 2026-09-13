@@ -1,0 +1,17 @@
+FROM python:3.11-slim
+
+WORKDIR /app
+
+RUN apt-get update \
+    && apt-get install -y --no-install-recommends gcc librdkafka-dev \
+    && rm -rf /var/lib/apt/lists/*
+
+COPY requirements.txt .
+RUN pip install --no-cache-dir -r requirements.txt
+
+COPY hdfs_loader.py .
+
+RUN useradd -m appuser
+USER appuser
+
+CMD ["python", "hdfs_loader.py"]
