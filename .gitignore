@@ -1,4 +1,5 @@
 .env
+ingestion/data/*.csv
 __pycache__/
 *.pyc
 .venv/
