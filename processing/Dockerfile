@@ -1,17 +1,15 @@
-FROM python:3.11-slim
+FROM bitnami/spark:3.5
 
+USER root
 WORKDIR /app
 
-RUN apt-get update \
-    && apt-get install -y --no-install-recommends gcc \
-    && rm -rf /var/lib/apt/lists/*
+RUN curl -L -o /opt/bitnami/spark/jars/postgresql-42.7.3.jar \
+    https://jdbc.postgresql.org/download/postgresql-42.7.3.jar
 
-COPY requirements.txt .
-RUN pip install --no-cache-dir -r requirements.txt
+RUN pip install --no-cache-dir psycopg2-binary==2.9.9
 
-COPY stream_processor.py .
+COPY spark_job.py .
 
-RUN useradd -m appuser
-USER appuser
-
-CMD ["faust", "-A", "stream_processor", "worker", "-l", "info"]
+CMD ["spark-submit", "--master", "local[*]", \
+     "--jars", "/opt/bitnami/spark/jars/postgresql-42.7.3.jar", \
+     "/app/spark_job.py"]
