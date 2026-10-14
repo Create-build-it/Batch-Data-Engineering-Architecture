@@ -47,4 +47,84 @@ services:
       - batch-net
 
   namenode:
-    image: b
+    image: bde2020/hadoop-namenode:2.0.0-hadoop3.2.1-java8
+    container_name: namenode
+    restart: unless-stopped
+    environment:
+      CLUSTER_NAME: batch-cluster
+      CORE_CONF_fs_defaultFS: hdfs://namenode:9000
+    ports:
+      - "9870:9870"
+      - "9000:9000"
+    volumes:
+      - namenode-data:/hadoop/dfs/name
+    networks:
+      - batch-net
+
+  datanode:
+    image: bde2020/hadoop-datanode:2.0.0-hadoop3.2.1-java8
+    container_name: datanode
+    restart: unless-stopped
+    depends_on:
+      - namenode
+    environment:
+      CORE_CONF_fs_defaultFS: hdfs://namenode:9000
+      SERVICE_PRECONDITION: ""
+    ports:
+      - "9864:9864"
+    volumes:
+      - datanode-data:/hadoop/dfs/data
+    networks:
+      - batch-net
+
+  postgres:
+    image: postgres:16
+    container_name: postgres
+    restart: unless-stopped
+    env_file:
+      - .env
+    ports:
+      - "5432:5432"
+    volumes:
+      - postgres-data:/var/lib/postgresql/data
+      - ./storage/init.sql:/docker-entrypoint-initdb.d/init.sql
+    networks:
+      - batch-net
+
+  ingestion-producer:
+    build:
+      context: ./ingestion
+      dockerfile: Dockerfile.producer
+    container_name: ingestion-producer
+    depends_on:
+      - kafka
+    volumes:
+      - ./ingestion/data:/data:ro
+    networks:
+      - batch-net
+
+  hdfs-loader:
+    build:
+      context: ./storage
+      dockerfile: Dockerfile.loader
+    container_name: hdfs-loader
+    depends_on:
+      - kafka
+      - namenode
+      - datanode
+    environment:
+      KAFKA_BROKER: kafka:29092
+    networks:
+      - batch-net
+
+  spark-processor:
+    build:
+      context: ./processing
+      dockerfile: Dockerfile
+    container_name: spark-processor
+    depends_on:
+      - namenode
+      - datanode
+      - postgres
+    networks:
+      - batch-net

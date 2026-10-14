@@ -47,4 +47,30 @@ def main():
         return
 
     producer_conf = {
-        "bootst
+                "bootstrap.servers": "kafka:29092",
+    }
+    producer = Producer(producer_conf)
+
+    sent = 0
+    with open(DATA_FILE, newline="", encoding="utf-8") as f:
+        for row in csv.DictReader(f):
+            while True:
+                try:
+                    producer.produce(
+                        KAFKA_TOPIC,
+                        value=json.dumps(row).encode("utf-8"),
+                        callback=delivery_report,
+                    )
+                    break
+                except BufferError:
+                    producer.poll(1)
+            producer.poll(0)
+            sent += 1
+
+    producer.flush()
+    logger.info("%d Datensaetze gesendet", sent)
+
+
+if __name__ == "__main__":
+    main()
+
